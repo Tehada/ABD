@@ -127,7 +127,7 @@ int main(int argc, char** argv) {
     }
     createFile(filename, FILE_SIZE); 
 
-    const std::string mode = "seq-read";
+    const std::string mode = argv[1];
     if (mode == "seq-read") {
         seqRead();
     } else if (mode == "seq-write") {

@@ -7,12 +7,12 @@
 #include <chrono>
 #include <iomanip>
 
-const off_t FILE_SIZE = std::pow(10, 8);//10gb == pow(10, 10);
-const size_t SEQ_SEGM_SIZE = std::pow(10, 7);//2gb == 2 * pow(10, 9);
-const size_t RND_SEGM_SIZE = std::pow(10, 6);//200mb == 2 * pow(10, 8);
+const off_t FILE_SIZE = std::pow(10, 8);//1gb == pow(10, 9);
+const size_t SEQ_SEGM_SIZE = std::pow(10, 8);
+const size_t RND_SEGM_SIZE = std::pow(10, 7);
 const int N_ITER = 10;
-//8 bytes here only!
-const char* filename = "BigFile";
+//8bytes here only!
+const char* filename = "/home/monroe/usb/BigFile";
 
 void err() {
     std::cerr << "error occured!\n";
@@ -36,7 +36,7 @@ void createFile(const char* filename, off_t size) {
     if (fd == -1) err();
     if (ftruncate(fd, size) == -1) err();
     //write sth to file???
-    fdatasync(fd); //or fsync()
+    fsync(fd); //or fdatasync()
     close(fd);
 }
 
@@ -45,58 +45,71 @@ void seqRead() {
     using std::chrono::duration_cast;
     using std::chrono::nanoseconds;
 
-    int fd = open(filename, O_RDWR);
-    if (fd == -1) err();
     char* buf = (char*) malloc(SEQ_SEGM_SIZE);
     if (buf == NULL) err();
-    if (lseek(fd, 0, SEEK_SET) == -1) err();
+
+    int fd = open(filename, O_RDWR | O_SYNC);
+    if (fd == -1) err();
 
     int64_t accum = 0;
     for (int i = 0; i < N_ITER; ++i) {
+  	if (lseek(fd, 0, SEEK_SET) == -1) err();
+
         auto start = steady_clock::now();
-        if (read(fd, buf, SEQ_SEGM_SIZE) != SEQ_SEGM_SIZE) err(); 
+        if (read(fd, buf, SEQ_SEGM_SIZE) != SEQ_SEGM_SIZE) err();
         auto diff = steady_clock::now() - start;
+
+	fsync(fd);
+    	dropCaches();
         std::cout << "iter " << i << ": " << diff.count() << " "
-            << duration_cast<nanoseconds>(diff).count() << "\n";
+                  << duration_cast<nanoseconds>(diff).count() << "\n";
         accum += duration_cast<nanoseconds>(diff).count();
     }
-
-    free(buf);
     close(fd);
-    //dropCaches();
+    free(buf);
 
     double data = SEQ_SEGM_SIZE / std::pow(10, 6);
     double time = accum / N_ITER / std::pow(10, 9);
-    std:: cout << data << " " << time << std::endl;
+    std::cout << data << " " << time << std::endl;
     std::cout << std::fixed << std::setprecision(1)
               << data / time << " MB/s\n";
 }
 
-/*
 void seqWrite() {
-    int fd = open(filename, O_RDWR);
-    if (fd == -1) err();
+    using std::chrono::steady_clock;
+    using std::chrono::duration_cast;
+    using std::chrono::nanoseconds;
+
     char* buf = (char*) malloc(SEQ_SEGM_SIZE);
     if (buf == NULL) err();
-    if (lseek(fd, 0, SEEK_SET) == -1) err();
 
-    std::chrono::milliseconds accum(0);
+    int fd = open(filename, O_RDWR);
+    if (fd == -1) err();
+
+    int64_t accum = 0;
     for (int i = 0; i < N_ITER; ++i) {
-        auto start = std::chrono::steady_clock::now();
-        if (write(fd, buf, SEQ_SEGM_SIZE) != SEQ_SEGM_SIZE) err(); 
-        accum = std::chrono::steady_clock::now() - start;
-        //accum += diff;
-    }
+   	if (lseek(fd, 0, SEEK_SET) == -1) err();
 
-    free(buf);
+        auto start = steady_clock::now();
+        if (write(fd, buf, SEQ_SEGM_SIZE) != SEQ_SEGM_SIZE) err(); 
+        auto diff = steady_clock::now() - start;
+        
+	fsync(fd);
+	dropCaches();
+        std::cout << "iter " << i << ": " << diff.count() << " "
+                  << duration_cast<nanoseconds>(diff).count() << "\n";
+        accum += duration_cast<nanoseconds>(diff).count();
+    }
     close(fd);
-    //dropCaches();
+    free(buf);
 
     double data = SEQ_SEGM_SIZE / std::pow(10, 6);
-    double time = accum.count() / N_ITER / std::pow(10, 6);
-    std::cout << data / time << " MB/s\n";
-} 
-*/
+    double time = accum / N_ITER / std::pow(10, 9);
+    std::cout << data << " " << time << std::endl;
+    std::cout << std::fixed << std::setprecision(1)
+              << data / time << " MB/s\n";
+}
+
 void rndRead() {
     
     //std::mt19937 generator;
@@ -114,7 +127,7 @@ int main() {
     if (mode == "seq-read") {
         seqRead();
     } else if (mode == "seq-write") {
-        //seqWrite();
+        seqWrite();
     } else if (mode == "rnd-read") {
         rndRead();
     } else if (mode == "rnd-write") {

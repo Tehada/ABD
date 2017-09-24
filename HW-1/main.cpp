@@ -120,7 +120,11 @@ void rndWrite() {
     std::cerr << "2743 mcs\n"; 
 }
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc < 2) {
+        std::cerr << "Incorrect number of arguments: " << argc << ", expected >=2" << std::endl;
+        return 1;
+    }
     createFile(filename, FILE_SIZE); 
 
     const std::string mode = "seq-read";
@@ -146,10 +150,3 @@ int main() {
     return 0;
 }
 
-/*
-int main(int argc, char** argv) {
-    if (argc < 2) {
-        std::cerr << "Incorrect number of arguments: " << argc << ", expected >=2" << std::endl;
-        return 1;
-    }
-*/

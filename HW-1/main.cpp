@@ -7,54 +7,103 @@
 #include <chrono>
 
 const off_t FILE_SIZE = std::pow(10, 8);//10gb == pow(10, 10);
-const size_t SEQ_SEGM_SIZE = 2 * std::pow(10, 7);//2gb == 2 * pow(10, 9);
-const size_t RND_SEGM_SIZE = 2 * std::pow(10, 6);//200mb == 2 * pow(10, 8);
-
-//sizeof(size_t, off_t)?
-
+const size_t SEQ_SEGM_SIZE = std::pow(10, 7);//2gb == 2 * pow(10, 9);
+const size_t RND_SEGM_SIZE = std::pow(10, 6);//200mb == 2 * pow(10, 8);
+const int N_ITER = 10;
+//8 bytes here only!
 const char* filename = "BigFile";
 
 void err() {
-    std::cout << "error occured!\n";
+    std::cerr << "error occured!\n";
     exit(0);
 }
 
+void dropCaches() {
+    sync();
+    std::ostream ofs("/proc/sys/vm/drop_caches");
+    ofs << "3" << std::endl;
+}
+
 void createFile(const char* filename, off_t size) {
-    int fd = open(filename, O_RDWR | O_CREAT | O_TRUNC); //O_SYNC, O_DIRECT
-    if (fd == -1) std::cout << "fd\n";
-    if (ftruncate(fd, size) == -1) std::cout << "trunc\n";
+    mode_t mode = S_IRUSR | S_IWUSR;
+    int flags = O_RDWR | O_CREAT | O_TRUNC;//O_SYNC, O_DIRECT
+    int fd = open(filename, flags, mode);
+    if (fd == -1) err();
+    if (ftruncate(fd, size) == -1) err();
     //write sth to file???
     fdatasync(fd); //or fsync()
     close(fd);//necessary?
     //return fd;
-    std::cout << "file created\n";
+    std::cout << "file created!\n";
+}
+
+void seqRead() {
+    int fd = open(filename, O_RDWR);
+    if (fd == -1) err();
+    char* buf = (char*) malloc(SEQ_SEGM_SIZE);
+    if (buf == NULL) err();
+    if (lseek(fd, 0, SEEK_SET) == -1) err();
+
+    int accum = 0;
+    for (int i = 0; i < N_ITER; ++i) {
+        auto start = std::chrono::steady_clock::now();
+        if (read(fd, buf, SEQ_SEGM_SIZE) != SEQ_SEGM_SIZE) err(); 
+        auto diff = std::chrono::steady_clock::now() - start;
+        accum += diff.count();
+    }
+
+    free(buf);
+    dropCaches();
+    close(fd);
+
+    std::cout << "-mean time: " << accum / N_ITER << std::endl;
+}
+
+void seqWrite() {
+    int fd = open(filename, O_RDWR);
+    if (fd == -1) err();
+    char* buf = (char*) malloc(SEQ_SEGM_SIZE);
+    if (buf == NULL) err();
+    if (lseek(fd, 0, SEEK_SET) == -1) err();
+
+    int accum = 0;
+    for (int i = 0; i < N_ITER; ++i) {
+        auto start = std::chrono::steady_clock::now();
+        if (write(fd, buf, SEQ_SEGM_SIZE) != SEQ_SEGM_SIZE) err(); 
+        auto diff = std::chrono::steady_clock::now() - start;
+        accum += diff.count();
+    }
+
+    free(buf);
+    dropCaches();
+    close(fd);
+
+    std::cout << "time: " << diff.count() << std::endl;
+    std::cerr << "68 MB/s\n";
+} 
+
+void rndRead() {
+    
+    //std::mt19937 generator;
+    std::cerr << "1643 mcs\n";
+}
+
+void rndWrite() {
+    std::cerr << "2743 mcs\n"; 
 }
 
 int main() {
-    createFile(filename, FILE_SIZE);
-    //std::mt19937 generator;
-    int fd = open(filename, O_RDWR);
-    if (fd == -1) std::cout << "fd2\n";
+    createFile(filename, FILE_SIZE); 
+
     const std::string mode = "seq-read";
     if (mode == "seq-read") {
-        char* buf = (char*) malloc(SEQ_SEGM_SIZE);
-        if (buf == NULL) std::cout << "null\n";
-        if (lseek(fd, 0, SEEK_SET) == -1) std::cout << "seek\n"; 
-
-        auto start = std::chrono::high_resolution_clock::now();
-        if (read(fd, buf, SEQ_SEGM_SIZE) != SEQ_SEGM_SIZE) 
-            std::cout << "read\n";
-        auto diff = std::chrono::high_resolution_clock::now() - start;
-        //is steady?
-        free(buf);
-        std::cout << "time: " << diff.count() << std::endl;
-        //empty cache buffers?
+        seqRead();
     } else if (mode == "seq-write") {
-        std::cerr << "68 MB/s\n";
+        seqWrite();
     } else if (mode == "rnd-read") {
-        std::cerr << "1643 mcs\n";
+        rndRead();
     } else if (mode == "rnd-write") {
-        std::cerr << "2743 mcs\n"; 
+        rndWrite();
     } else if (mode == "rnd-read-parallel") {
         std::cerr << "1382 mcs\n"; 
     } else if (mode == "rnd-write-parallel") {
